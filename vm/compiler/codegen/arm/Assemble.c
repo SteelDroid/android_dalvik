@@ -878,6 +878,11 @@ ArmEncodingMap EncodingMap[kArmLast] = {
                  kFmtBitBlt, 3, 0, kFmtUnused, -1, -1, kFmtUnused, -1, -1,
                  kFmtUnused, -1, -1, IS_UNARY_OP,
                  "dmb","#!0B",2),
+    ENCODING_MAP(kThumb2RsbRRR,  0xebd00000, /* setflags encoding */
+                 kFmtBitBlt, 11, 8, kFmtBitBlt, 19, 16, kFmtBitBlt, 3, 0,
+                 kFmtShift, -1, -1,
+                 IS_QUAD_OP | REG_DEF0_USE12 | SETS_CCODES,
+                 "rsb", "r!0d, r!1d, r!2d!3H", 2),
 };
 
 /*
