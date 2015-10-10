@@ -284,8 +284,6 @@ static jobject addGlobalReference(Object* obj);
 
 #define kGlobalRefsTableInitialSize 512
 #define kGlobalRefsTableMaxSize     51200       /* arbitrary, must be < 64K */
-#define kGrefWaterInterval          100
-#define kTrackGrefUsage             true
 
 #define kPinTableInitialSize        16
 #define kPinTableMaxSize            1024
@@ -309,8 +307,6 @@ bool dvmJniStartup(void)
 #endif
 
     dvmInitMutex(&gDvm.jniGlobalRefLock);
-    gDvm.jniGlobalRefLoMark = 0;
-    gDvm.jniGlobalRefHiMark = kGrefWaterInterval * 2;
 
     if (!dvmInitReferenceTable(&gDvm.jniPinRefTable,
             kPinTableInitialSize, kPinTableMaxSize))
@@ -801,30 +797,6 @@ static jobject addGlobalReference(Object* obj)
     LOGVV("GREF add %p  (%s.%s)\n", obj,
         dvmGetCurrentJNIMethod()->clazz->descriptor,
         dvmGetCurrentJNIMethod()->name);
-
-    /* GREF usage tracking; should probably be disabled for production env */
-    if (kTrackGrefUsage && gDvm.jniGrefLimit != 0) {
-        int count = dvmIndirectRefTableEntries(&gDvm.jniGlobalRefTable);
-        // TODO: adjust for "holes"
-        if (count > gDvm.jniGlobalRefHiMark) {
-            LOGD("GREF has increased to %d\n", count);
-            gDvm.jniGlobalRefHiMark += kGrefWaterInterval;
-            gDvm.jniGlobalRefLoMark += kGrefWaterInterval;
-
-            /* watch for "excessive" use; not generally appropriate */
-            if (count >= gDvm.jniGrefLimit) {
-                JavaVMExt* vm = (JavaVMExt*) gDvm.vmList;
-                if (vm->warnError) {
-                    dvmDumpIndirectRefTable(&gDvm.jniGlobalRefTable,
-                        "JNI global");
-                    LOGE("Excessive JNI global references (%d)\n", count);
-                    dvmAbort();
-                } else {
-                    LOGW("Excessive JNI global references (%d)\n", count);
-                }
-            }
-        }
-    }
 #else
     if (!dvmAddToReferenceTable(&gDvm.jniGlobalRefTable, obj)) {
         dvmDumpReferenceTable(&gDvm.jniGlobalRefTable, "JNI global");
@@ -838,27 +810,6 @@ static jobject addGlobalReference(Object* obj)
         dvmGetCurrentJNIMethod()->clazz->descriptor,
         dvmGetCurrentJNIMethod()->name);
 
-    /* GREF usage tracking; should probably be disabled for production env */
-    if (kTrackGrefUsage && gDvm.jniGrefLimit != 0) {
-        int count = dvmReferenceTableEntries(&gDvm.jniGlobalRefTable);
-        if (count > gDvm.jniGlobalRefHiMark) {
-            LOGD("GREF has increased to %d\n", count);
-            gDvm.jniGlobalRefHiMark += kGrefWaterInterval;
-            gDvm.jniGlobalRefLoMark += kGrefWaterInterval;
-
-            /* watch for "excessive" use; not generally appropriate */
-            if (count >= gDvm.jniGrefLimit) {
-                JavaVMExt* vm = (JavaVMExt*) gDvm.vmList;
-                if (vm->warnError) {
-                    dvmDumpReferenceTable(&gDvm.jniGlobalRefTable,"JNI global");
-                    LOGE("Excessive JNI global references (%d)\n", count);
-                    dvmAbort();
-                } else {
-                    LOGW("Excessive JNI global references (%d)\n", count);
-                }
-            }
-        }
-    }
 #endif
 
     dvmUnlockMutex(&gDvm.jniGlobalRefLock);
@@ -887,15 +838,6 @@ static void deleteGlobalReference(jobject jobj)
         goto bail;
     }
 
-    if (kTrackGrefUsage && gDvm.jniGrefLimit != 0) {
-        int count = dvmIndirectRefTableEntries(&gDvm.jniGlobalRefTable);
-        // TODO: not quite right, need to subtract holes
-        if (count < gDvm.jniGlobalRefLoMark) {
-            LOGD("GREF has decreased to %d\n", count);
-            gDvm.jniGlobalRefHiMark -= kGrefWaterInterval;
-            gDvm.jniGlobalRefLoMark -= kGrefWaterInterval;
-        }
-    }
 #else
     if (!dvmRemoveFromReferenceTable(&gDvm.jniGlobalRefTable,
             gDvm.jniGlobalRefTable.table, jobj))
@@ -905,14 +847,6 @@ static void deleteGlobalReference(jobject jobj)
         goto bail;
     }
 
-    if (kTrackGrefUsage && gDvm.jniGrefLimit != 0) {
-        int count = dvmReferenceTableEntries(&gDvm.jniGlobalRefTable);
-        if (count < gDvm.jniGlobalRefLoMark) {
-            LOGD("GREF has decreased to %d\n", count);
-            gDvm.jniGlobalRefHiMark -= kGrefWaterInterval;
-            gDvm.jniGlobalRefLoMark -= kGrefWaterInterval;
-        }
-    }
 #endif
 
 bail:
@@ -1029,26 +963,20 @@ static void pinPrimitiveArray(ArrayObject* arrayObj)
     }
 
     /*
-     * If we're watching global ref usage, also keep an eye on these.
-     *
      * The total number of pinned primitive arrays should be pretty small.
      * A single array should not be pinned more than once or twice; any
      * more than that is a strong indicator that a Release function is
      * not being called.
      */
-    if (kTrackGrefUsage && gDvm.jniGrefLimit != 0) {
         int count = 0;
         Object** ppObj = gDvm.jniPinRefTable.table;
         while (ppObj < gDvm.jniPinRefTable.nextEntry) {
-            if (*ppObj++ == (Object*) arrayObj)
+            if (*ppObj++ == (Object*) arrayObj) {
                 count++;
+            }
         }
-
-        if (count > kPinComplainThreshold) {
-            LOGW("JNI: pin count on array %p (%s) is now %d\n",
-                arrayObj, arrayObj->obj.clazz->descriptor, count);
-            /* keep going */
-        }
+    if (count > kPinComplainThreshold) {
+    /* keep going */
     }
 
     dvmUnlockMutex(&gDvm.jniPinRefLock);
