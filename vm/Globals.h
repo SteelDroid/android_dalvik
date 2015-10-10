@@ -585,6 +585,7 @@ struct DvmGlobals {
     AllocRecord*    allocRecords;
     int             allocRecordHead;        /* most-recently-added entry */
     int             allocRecordCount;       /* #of valid entries */
+    int             allocRecordMax;         /* Number of allocated entries. */
 
 #ifdef WITH_ALLOC_LIMITS
     /* set on first use of an alloc limit, never cleared */
