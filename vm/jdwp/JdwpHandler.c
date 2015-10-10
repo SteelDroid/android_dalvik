@@ -416,6 +416,7 @@ static JdwpError handleVM_CreateString(JdwpState* state,
     LOGV("  Req to create string '%s'\n", str);
 
     stringId = dvmDbgCreateString(str);
+    free(str);
     if (stringId == 0)
         return ERR_OUT_OF_MEMORY;
 
