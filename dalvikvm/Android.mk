@@ -23,7 +23,6 @@ dalvikvm_src_files := \
     Main.c
 
 dalvikvm_c_includes := \
-    $(JNI_H_INCLUDE) \
     dalvik/include
 
 

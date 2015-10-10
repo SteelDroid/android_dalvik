@@ -244,7 +244,6 @@ ifeq ($(WITH_HPROF),true)
 endif   # WITH_HPROF
 
 LOCAL_C_INCLUDES += \
-	$(JNI_H_INCLUDE) \
 	dalvik \
 	dalvik/vm \
 	external/zlib \
